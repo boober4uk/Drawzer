@@ -15,13 +15,13 @@ except ImportError:
     pass
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8080").rstrip("/")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8000").rstrip("/")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "DrawzoBot")
 APP_SHORT_NAME = os.getenv("APP_SHORT_NAME", "")
 ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
 ADMIN_KEY = os.getenv("ADMIN_KEY", "")
 DONATE_STARS = int(os.getenv("DONATE_STARS", "100"))
-PORT = int(os.getenv("PORT", "8080"))
+PORT = 8000
 DEV_MODE = os.getenv("DEV_MODE") == "1"
 STATIC = Path(__file__).parent / "static"
 
@@ -337,7 +337,6 @@ async def main():
                     web.post("/admin/close", admin_close), web.get("/health", lambda _: web.Response(text="ok")),
                     web.static("/static", STATIC)])
     runner = web.AppRunner(app); await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", PORT).start()
     print(f"Drawzo: http://localhost:{PORT}")
     if not BOT_TOKEN:
         print("BOT_TOKEN не задан — работает только веб-часть (DEV_MODE)"); await asyncio.Event().wait()
