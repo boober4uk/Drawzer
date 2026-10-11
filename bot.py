@@ -23,7 +23,7 @@ ADMIN_KEY = os.getenv("ADMIN_KEY", "")
 DONATE_STARS = int(os.getenv("DONATE_STARS", "100"))
 PORT = 8000
 DEV_MODE = os.getenv("DEV_MODE") == "1"
-STATIC = Path(__file__).parent / "static"
+STATIC = Path(__file__).parent / "public"
 
 W, H = 1600, 1000                       # размер холста (совпадает с клиентом)
 MAX_PLAYERS, MAX_SPECS, MAX_OPS, MAX_ROOMS, EMPTY_TTL = 8, 100, 6000, 500, 600
