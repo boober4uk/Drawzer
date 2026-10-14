@@ -17,7 +17,7 @@ except ImportError:
     pass
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8080").rstrip("/")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "http://0.0.0.0:3000").rstrip("/")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "DrawzoBot")
 APP_SHORT_NAME = os.getenv("APP_SHORT_NAME", "")
 ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
@@ -890,7 +890,7 @@ async def main():
                     web.static("/static", STATIC)])
     runner = web.AppRunner(app); await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
-    print(f"Drawzo: http://localhost:{PORT}")
+    print(f"Drawzo: http://0.0.0.0:{PORT}")
     if not BOT_TOKEN:
         print("BOT_TOKEN не задан — работает только веб-часть (DEV_MODE)"); await asyncio.Event().wait()
     bot = Bot(BOT_TOKEN.strip().strip("\"'")); dp = Dispatcher(); dp.include_router(router)
