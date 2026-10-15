@@ -2,9 +2,9 @@
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Drawzo</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@600;700&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
 <style>
 /* Весь внешний вид — через переменные. Для «карандашного» стиля меняем в основном их. */
 :root{--bg:#1c2038;--paper:#f7f7fb;--ink:#1b1e36;--line:#1b1e36;--accent:#ff5d8f;
@@ -300,18 +300,54 @@ body.dark-ui #pHex,body.dark-ui .txt,body.dark-ui #gIn{background:#fff;color:#1b
 body.dark-ui .grip{background:#ffffff0b}
 body.dark-ui #toast{background:#08090e;color:#fff}
 body.dark-ui #gChat .sys{color:#8ce0d2}
-#maintWarn{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:16px;background:#05060cdb;animation:fade .2s}
-#maintWarn .mwcard{width:min(460px,100%);padding:24px;background:var(--paper);color:var(--ink);border:2px solid var(--line);border-radius:18px;box-shadow:6px 7px 0 var(--c1);display:flex;flex-direction:column;gap:12px;text-align:center}
-#maintWarn h2{margin:0;font:700 36px var(--hand)}
-#maintCountdown{font:700 32px var(--hand);color:var(--accent)}
-#maintTicker{position:fixed;left:50%;top:8px;z-index:9990;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff1c9;color:#29200c;border:2px solid #b87912;border-radius:12px;box-shadow:2px 3px 0 #0004;font-size:12px;max-width:calc(100vw - 16px)}
+/* В тёмной теме тени остаются глубокими, а не превращаются в светлые обводки. */
+body.dark-ui button:hover{box-shadow:0 3px 0 #07080d,0 5px 12px #0005}
+body.dark-ui .panel,body.dark-ui #picker,body.dark-ui #ready .card,body.dark-ui #plus .card,
+body.dark-ui .rbox,body.dark-ui .modal .card,body.dark-ui #gTip,body.dark-ui #maintWarn .mwcard{
+  box-shadow:3px 4px 0 #08090f,0 10px 24px #0006}
+body.dark-ui .grip button{box-shadow:none}
+body.dark-ui #loupe{box-shadow:2px 3px 0 #08090f}
+body.dark-ui .gcap{box-shadow:2px 2px 0 #08090f}
+/* Лёгкий дымчатый слой снижает яркость листа, но оставляет чёрные контуры читаемыми. */
+#world::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.075);pointer-events:none;z-index:4;display:none}
+body.dark-ui #world::after{display:block}
+body.dark-ui #stage.inf{background-color:#eeeeF3}
+body.dark-ui #liveInf{filter:brightness(.92)}
+#maintWarn{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:16px;background:rgba(3,5,12,.84);backdrop-filter:blur(9px);animation:fade .2s}
+#maintWarn .mwcard{width:min(460px,100%);padding:clamp(22px,5vw,32px);background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:22px;box-shadow:0 20px 65px #0008;display:flex;flex-direction:column;align-items:center;gap:13px;text-align:center}
+#maintWarn h2{margin:0;font:800 30px/1.15 var(--font);letter-spacing:-.6px}
+#maintCountdown{font:800 32px var(--font);font-variant-numeric:tabular-nums;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border-radius:14px;padding:8px 18px}
+#maintTicker{position:fixed;left:50%;top:8px;z-index:9990;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff1c9;color:#29200c;border:1px solid #b87912;border-radius:12px;box-shadow:0 3px 12px #0005;font-size:12px;max-width:calc(100vw - 16px)}
 #maintTicker button{min-height:28px;padding:0 8px;background:#fff;color:#29200c;border-color:#b87912;white-space:nowrap}
-#maintBlock{position:fixed;inset:0;z-index:20000;background:#030407;color:#f5f5f7;display:grid;place-items:center;padding:22px;text-align:center}
-#maintBlock .mbcard{width:min(560px,100%);display:flex;flex-direction:column;align-items:center;gap:16px}
-#maintBlock h1{font:700 clamp(38px,8vw,64px)/1 var(--hand);margin:0}
-#maintBlock p{max-width:480px;line-height:1.6;color:#c6c8d1;margin:0}
-#maintBlock button{background:#f5f5f7;color:#11131a;border:2px solid #f5f5f7;min-height:44px;padding:0 22px}
-#maintStatusText{min-height:24px;color:#ffd23f!important;font-size:13px}
+#maintBlock{position:fixed;inset:0;z-index:20000;background:radial-gradient(ellipse at 50% 10%,#171d2d 0,#080a11 48%,#030407 100%);color:#f5f5f7;display:grid;place-items:center;padding:18px;text-align:center;overflow:auto}
+#maintBlock::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.18;background-image:radial-gradient(#aeb8d9 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(to bottom,#000,transparent 80%)}
+#maintBlock .mbcard{position:relative;width:min(620px,100%);display:flex;flex-direction:column;align-items:center;gap:16px;padding:clamp(22px,5vw,38px);border:1px solid #343b50;border-radius:26px;background:linear-gradient(145deg,rgba(22,26,40,.94),rgba(7,9,15,.95));box-shadow:0 24px 90px #0009,inset 0 1px 0 #ffffff0d}
+#maintBlock .maint-badge{display:grid;place-items:center;width:58px;height:58px;border:1px solid #4a536d;border-radius:18px;background:linear-gradient(145deg,#222b42,#101521);font-size:27px;box-shadow:0 8px 24px #0005}
+#maintBlock .maint-eyebrow{margin:0;color:#9ba7c7;text-transform:uppercase;letter-spacing:2px;font:800 11px var(--font)}
+#maintBlock h1{font:800 clamp(30px,7vw,46px)/1.08 var(--font);letter-spacing:-1.2px;margin:0}
+#maintBlock p{max-width:480px;line-height:1.65;color:#bfc5d6;margin:0}
+#maintBlock .maint-actions{display:flex;gap:9px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:4px}
+#maintBlock button{background:#e8ecf7;color:#111522;border:1px solid #e8ecf7;min-height:44px;padding:0 20px;border-radius:12px;font-weight:800;box-shadow:0 4px 0 #070910}
+#maintBlock button:hover{box-shadow:0 4px 0 #070910,0 8px 22px #0007}
+#maintBlock button.secondary{background:#161c2a;color:#e8ecf7;border-color:#3c465e;box-shadow:none}
+#maintStatusText{min-height:20px;color:#ffd976!important;font-size:13px}
+#maintGame{width:100%;margin-top:8px;padding-top:18px;border-top:1px solid #31394d;display:flex;flex-direction:column;align-items:center;gap:12px;animation:fade .2s}
+#maintGame .mg-head{display:flex;justify-content:space-between;align-items:center;gap:8px;width:min(350px,100%);font-size:13px;color:#c5cbe0}
+#maintGame .mg-head b{font-variant-numeric:tabular-nums;color:#fff}
+#maintGame .mg-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#maintGame .mg-actions button{min-height:34px;padding:0 12px;font-size:12px}
+#maintGame .mg-actions button.active{background:#d7b8ff;color:#171022;border-color:#d7b8ff}
+#mineBoard{width:min(350px,100%);display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:4px;touch-action:manipulation;user-select:none}
+#mineBoard button{min-width:0;width:100%;aspect-ratio:1;min-height:0;padding:0;border:1px solid #4a5572;border-radius:6px;background:linear-gradient(145deg,#303951,#20283a);color:#fff;font:800 clamp(12px,3.3vw,17px) var(--font);box-shadow:0 2px 0 #090c13;transition:background .1s,transform .1s}
+#mineBoard button:hover{transform:none;box-shadow:0 2px 0 #090c13}
+#mineBoard button:active{transform:scale(.94)}
+#mineBoard button.open{background:#dfe5f0;color:#1b2435;border-color:#b8c3d9;box-shadow:none}
+#mineBoard button.flag{color:#ffcf7b;background:#3e3540}
+#mineBoard button.mine{background:#9b3546;color:#fff}
+#mineBoard button.n1{color:#2467db}#mineBoard button.n2{color:#218454}#mineBoard button.n3{color:#d23d4d}#mineBoard button.n4{color:#734fd1}#mineBoard button.n5{color:#a34f22}#mineBoard button.n6{color:#168b9e}#mineBoard button.n7{color:#202735}#mineBoard button.n8{color:#5b6579}
+#mineMessage{min-height:19px;font-size:13px;color:#dce4ff!important}
+body.dark-ui #maintWarn .mwcard{box-shadow:0 20px 65px #000b}
+@media(max-width:440px){#maintBlock{padding:10px}#maintBlock .mbcard{padding:20px 14px;border-radius:20px}#mineBoard{gap:3px}}
 </style></head>
 <body data-can="0" data-owner="0">
 
@@ -322,9 +358,18 @@ body.dark-ui #gChat .sys{color:#8ce0d2}
   <button id="maintAck" class="cta" style="animation:none">Понятно, продолжить</button>
 </div></div>
 <div id="maintTicker" hidden><span>Техработы скоро · <b id="maintTickerTime">03:00</b></span><button id="maintDetails">Подробнее</button></div>
-<div id="maintBlock" hidden role="alertdialog" aria-modal="true"><div class="mbcard">
-  <h1>Технические работы</h1><p id="maintBlockReason">Сейчас обновляем Drawzo и улучшаем работу сервиса. Пожалуйста, зайдите чуть позже.</p>
-  <button id="maintStatus">Статус</button><p id="maintStatusText" aria-live="polite"></p>
+<div id="maintBlock" hidden role="alertdialog" aria-modal="true" aria-labelledby="maintBlockTitle"><div class="mbcard">
+  <div class="maint-badge" aria-hidden="true">⚙</div><p class="maint-eyebrow">DRAWZO · СЛУЖЕБНОЕ ОБНОВЛЕНИЕ</p>
+  <h1 id="maintBlockTitle">Технические работы</h1><p id="maintBlockReason">Сейчас обновляем Drawzo и улучшаем работу сервиса. Пожалуйста, зайдите чуть позже.</p>
+  <div class="maint-actions"><button id="maintStatus">Проверить статус</button><button id="maintGameToggle" class="secondary" aria-expanded="false" aria-controls="maintGame">Сыграть в сапёра</button></div>
+  <p id="maintStatusText" aria-live="polite"></p>
+  <section id="maintGame" hidden aria-label="Локальная игра Сапёр">
+    <div style="font:800 17px var(--font);color:#f2f4fb">Небольшая пауза? Разминируй поле.</div>
+    <div class="mg-head"><span>Мины: <b id="mineCount">10</b></span><span>Время: <b id="mineTime">00:00</b></span><span id="mineState">Готов</span></div>
+    <div id="mineBoard" role="grid" aria-label="Поле сапёра 9 на 9"></div>
+    <div class="mg-actions"><button id="mineReset" class="secondary">Новая игра</button><button id="mineFlagMode" class="secondary" aria-pressed="false">⚑ Режим флага: выкл.</button></div>
+    <p id="mineMessage" aria-live="polite">Нажми на клетку. Первая клетка всегда безопасна.</p>
+  </section>
 </div></div>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -702,6 +747,23 @@ $('#maintDetails').onclick=()=>{$('#maintTicker').hidden=true;$('#maintWarn').hi
 $('#maintStatus').onclick=async()=>{const b=$('#maintStatus');b.disabled=true;$('#maintStatusText').textContent='Проверяем статус…';try{const r=await fetch('/maintenance/status',{cache:'no-store'});if(!r.ok)throw Error('status');const m=await r.json();if(m.phase==='active')$('#maintStatusText').textContent='Да, технические работы ещё ведутся. Попробуйте проверить чуть позже.';else{applyMaintenance(m);location.reload()}}catch{$('#maintStatusText').textContent='Не удалось проверить статус. Проверьте подключение и попробуйте ещё раз.'}finally{b.disabled=false}};
 async function pollMaintenance(){try{const r=await fetch('/maintenance/status',{cache:'no-store'});if(r.ok)applyMaintenance(await r.json())}catch{}}
 setInterval(paintMaintCountdown,1000);setInterval(pollMaintenance,4000);pollMaintenance();
+
+/* ── Локальный сапёр для экрана техработ. Только состояние в памяти браузера: без БД, бота и запросов к серверу. ── */
+const Mine={size:9,total:10,cells:[],first:true,over:false,flags:0,opened:0,flagMode:false,startedAt:0,clock:null,seconds:0};
+const mineBoard=$('#mineBoard');
+function mineNeighbors(i){const x=i%Mine.size,y=Math.floor(i/Mine.size),out=[];for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;if(nx>=0&&nx<Mine.size&&ny>=0&&ny<Mine.size)out.push(ny*Mine.size+nx)}return out}
+function mineTimeText(n){return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0')}
+function mineReset(){if(Mine.clock)clearInterval(Mine.clock);Object.assign(Mine,{cells:Array.from({length:81},()=>({mine:false,n:0,open:false,flag:false})),first:true,over:false,flags:0,opened:0,flagMode:false,startedAt:0,seconds:0});$('#mineFlagMode').classList.remove('active');$('#mineFlagMode').setAttribute('aria-pressed','false');$('#mineFlagMode').textContent='⚑ Режим флага: выкл.';$('#mineTime').textContent='00:00';$('#mineCount').textContent='10';$('#mineState').textContent='Готов';$('#mineMessage').textContent='Нажми на клетку. Первая клетка всегда безопасна.';renderMine()}
+function minePlace(first){const safe=new Set([first,...mineNeighbors(first)]),pool=[];for(let i=0;i<Mine.cells.length;i++)if(!safe.has(i))pool.push(i);for(let i=pool.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[pool[i],pool[j]]=[pool[j],pool[i]]}for(const i of pool.slice(0,Mine.total))Mine.cells[i].mine=true;Mine.cells.forEach((c,i)=>{if(!c.mine)c.n=mineNeighbors(i).filter(n=>Mine.cells[n].mine).length});Mine.first=false;Mine.startedAt=Date.now();$('#mineState').textContent='Игра идёт';Mine.clock=setInterval(()=>{if(!Mine.over){Mine.seconds=Math.floor((Date.now()-Mine.startedAt)/1000);$('#mineTime').textContent=mineTimeText(Mine.seconds)}},500)}
+function renderMine(){mineBoard.replaceChildren();Mine.cells.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.dataset.i=String(i);b.setAttribute('role','gridcell');b.setAttribute('aria-label',`Клетка ${Math.floor(i/9)+1}, ${i%9+1}${c.open?(c.mine?', мина':c.n?', мин рядом: '+c.n:', пусто'):c.flag?', флаг':'закрыта'}`);if(c.open){b.classList.add('open');if(c.mine){b.classList.add('mine');b.textContent='✹'}else if(c.n){b.classList.add('n'+c.n);b.textContent=String(c.n)}}else if(c.flag){b.classList.add('flag');b.textContent='⚑'}else b.textContent='';b.addEventListener('click',()=>mineClick(i));b.addEventListener('contextmenu',e=>{e.preventDefault();mineFlag(i)});mineBoard.append(b)})}
+function mineUpdateCounters(){$('#mineCount').textContent=String(Mine.total-Mine.flags)}
+function mineFlag(i){if(Mine.over||Mine.cells[i].open)return;const c=Mine.cells[i];if(!c.flag&&Mine.flags>=Mine.total){$('#mineMessage').textContent='На поле всего 10 флагов.';return}c.flag=!c.flag;Mine.flags+=c.flag?1:-1;mineUpdateCounters();renderMine()}
+function mineReveal(i){const c=Mine.cells[i];if(c.open||c.flag||Mine.over)return;c.open=true;Mine.opened++;if(!c.n&&!c.mine){for(const n of mineNeighbors(i))if(!Mine.cells[n].open&&!Mine.cells[n].mine)mineReveal(n)} }
+function mineFinish(win){Mine.over=true;if(Mine.clock)clearInterval(Mine.clock);$('#mineState').textContent=win?'Победа!':'Бум!';$('#mineMessage').textContent=win?'Отлично! Все безопасные клетки открыты.':'Упс, мина. Нажми «Новая игра», чтобы попробовать ещё раз.';if(!win)Mine.cells.forEach(c=>{if(c.mine)c.open=true});renderMine()}
+function mineClick(i){if(Mine.over)return;const c=Mine.cells[i];if(Mine.flagMode){mineFlag(i);return}if(c.flag||c.open)return;if(Mine.first)minePlace(i);if(Mine.cells[i].mine){mineFinish(false);return}mineReveal(i);renderMine();if(Mine.opened>=Mine.cells.length-Mine.total)mineFinish(true)}
+$('#maintGameToggle').onclick=()=>{const shown=$('#maintGame').hidden;$('#maintGame').hidden=!shown;$('#maintGameToggle').setAttribute('aria-expanded',String(shown));$('#maintGameToggle').textContent=shown?'Скрыть сапёра':'Сыграть в сапёра';if(shown&&!Mine.cells.length)mineReset()};
+$('#mineReset').onclick=mineReset;$('#mineFlagMode').onclick=()=>{Mine.flagMode=!Mine.flagMode;$('#mineFlagMode').classList.toggle('active',Mine.flagMode);$('#mineFlagMode').setAttribute('aria-pressed',String(Mine.flagMode));$('#mineFlagMode').textContent='⚑ Режим флага: '+(Mine.flagMode?'вкл.':'выкл.');$('#mineMessage').textContent=Mine.flagMode?'Выберите закрытые клетки, чтобы поставить или снять флаг.':'Нажмите на клетку, чтобы открыть её.'};
+mineReset();
 
 /* ── Сеть ── */
 function connect(onopen){
