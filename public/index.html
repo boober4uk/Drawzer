@@ -292,8 +292,40 @@ body.in #bSettings{right:10px;top:auto;bottom:10px;z-index:35}
 .gcap::after{content:'';position:absolute;left:var(--ax,50%);margin-left:-6px;border:6px solid transparent}
 .gcap.b::after{top:-12px;border-bottom-color:var(--c1)}.gcap.t::after{bottom:-12px;border-top-color:var(--c1)}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important;transition-duration:.01ms!important}}
+
+/* Тёмная тема меняет интерфейс, но не фильтрует холст: белый лист и контуры рисунка остаются прежними. */
+body.dark-ui{--bg:#10121c;--paper:#242739;--ink:#e9ebf7;--line:#626985;color:#e9ebf7;color-scheme:dark}
+body.dark-ui button.on{color:#11131c}
+body.dark-ui #pHex,body.dark-ui .txt,body.dark-ui #gIn{background:#fff;color:#1b1e36;color-scheme:light}
+body.dark-ui .grip{background:#ffffff0b}
+body.dark-ui #toast{background:#08090e;color:#fff}
+body.dark-ui #gChat .sys{color:#8ce0d2}
+#maintWarn{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:16px;background:#05060cdb;animation:fade .2s}
+#maintWarn .mwcard{width:min(460px,100%);padding:24px;background:var(--paper);color:var(--ink);border:2px solid var(--line);border-radius:18px;box-shadow:6px 7px 0 var(--c1);display:flex;flex-direction:column;gap:12px;text-align:center}
+#maintWarn h2{margin:0;font:700 36px var(--hand)}
+#maintCountdown{font:700 32px var(--hand);color:var(--accent)}
+#maintTicker{position:fixed;left:50%;top:8px;z-index:9990;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff1c9;color:#29200c;border:2px solid #b87912;border-radius:12px;box-shadow:2px 3px 0 #0004;font-size:12px;max-width:calc(100vw - 16px)}
+#maintTicker button{min-height:28px;padding:0 8px;background:#fff;color:#29200c;border-color:#b87912;white-space:nowrap}
+#maintBlock{position:fixed;inset:0;z-index:20000;background:#030407;color:#f5f5f7;display:grid;place-items:center;padding:22px;text-align:center}
+#maintBlock .mbcard{width:min(560px,100%);display:flex;flex-direction:column;align-items:center;gap:16px}
+#maintBlock h1{font:700 clamp(38px,8vw,64px)/1 var(--hand);margin:0}
+#maintBlock p{max-width:480px;line-height:1.6;color:#c6c8d1;margin:0}
+#maintBlock button{background:#f5f5f7;color:#11131a;border:2px solid #f5f5f7;min-height:44px;padding:0 22px}
+#maintStatusText{min-height:24px;color:#ffd23f!important;font-size:13px}
 </style></head>
 <body data-can="0" data-owner="0">
+
+<div id="maintWarn" hidden role="alertdialog" aria-modal="true" aria-labelledby="maintWarnTitle"><div class="mwcard">
+  <h2 id="maintWarnTitle">Скоро технические работы</h2>
+  <p id="maintWarnReason">Через 3 минуты начнутся технические работы. Сохраните проекты, чтобы ничего не потерять.</p>
+  <div>До начала осталось</div><div id="maintCountdown">03:00</div>
+  <button id="maintAck" class="cta" style="animation:none">Понятно, продолжить</button>
+</div></div>
+<div id="maintTicker" hidden><span>Техработы скоро · <b id="maintTickerTime">03:00</b></span><button id="maintDetails">Подробнее</button></div>
+<div id="maintBlock" hidden role="alertdialog" aria-modal="true"><div class="mbcard">
+  <h1>Технические работы</h1><p id="maintBlockReason">Сейчас обновляем Drawzo и улучшаем работу сервиса. Пожалуйста, зайдите чуть позже.</p>
+  <button id="maintStatus">Статус</button><p id="maintStatusText" aria-live="polite"></p>
+</div></div>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <symbol id="i-select" viewBox="0 0 24 24"><path d="M5 3l14 7-6 2-2 6z"/></symbol>
@@ -439,7 +471,7 @@ body.in #bSettings{right:10px;top:auto;bottom:10px;z-index:35}
     <button data-tool="area" id="bArea" hidden title="Область для реплея (бесконечный холст): обведите свой кусочек"><svg class="ic"><use href="#i-frame"/></svg></button>
     <button data-tool="hand" title="Рука / Пробел"><svg class="ic"><use href="#i-hand"/></svg></button>
     <button id="bImg" title="Вставить изображение (I, Ctrl+V или перетащите файл)"><svg class="ic"><use href="#i-image"/></svg></button>
-    <button id="bUndo" data-sfx="undo" title="Отменить (Ctrl+Z)"><svg class="ic"><use href="#i-undo"/></svg></button>
+    <button id="bUndo" data-sfx="undo" title="Отменить одно из последних 20 действий (Ctrl+Z)"><svg class="ic"><use href="#i-undo"/></svg></button>
     <button id="bRedo" data-sfx="redo" title="Вернуть (Ctrl+Y)"><svg class="ic"><use href="#i-redo"/></svg></button>
   </div>
   <div class="grid" id="shapeBar" hidden>
@@ -523,6 +555,7 @@ body.in #bSettings{right:10px;top:auto;bottom:10px;z-index:35}
   <label class="sl2"><span>Громкость звуков</span><input type="range" id="vSfx" min="0" max="100"></label>
   <label class="chk"><input type="checkbox" id="stMusicOn"><span>Фоновая музыка</span></label>
   <label class="chk"><input type="checkbox" id="stNotify"><span>Уведомлять, когда кто-то заходит в комнату</span></label>
+  <label class="chk"><input type="checkbox" id="stDark"><span>Тёмная тема интерфейса (холст и рисунки остаются белыми)</span></label>
   <button id="stGuide">Показать гайд по холсту</button>
   <button id="stReset" title="Вернуть окна на места и сбросить кисть, цвет и слой">Сбросить интерфейс</button>
   <div id="trailBox">
@@ -644,6 +677,32 @@ const DEVU=new URLSearchParams(location.search).get('u'),BROWSER=!tg?.initData&&
 function guestToken(){let t=localStorage.getItem('guest');if(!t||t.length<20){t=[...crypto.getRandomValues(new Uint8Array(24))].map(b=>b.toString(36).padStart(2,'0')).join('').slice(0,40);localStorage.setItem('guest',t)}return t}
 const initStr=()=>tg?.initData||(DEVU?'dev:'+DEVU:'guest:'+guestToken());
 
+/* ── Статус техработ: клиент не блокирует белый холст темизацией, а при active показывает чёрный экран. ── */
+let maintPhase=null,maintDeadline=null,maintReason='Плановые технические работы';
+function fmtMaint(seconds){seconds=Math.max(0,Math.ceil(seconds));return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
+function paintMaintCountdown(){if(maintPhase!=='warning'||!maintDeadline)return;const left=(maintDeadline*1000-Date.now())/1000,txt=fmtMaint(left);$('#maintCountdown').textContent=txt;$('#maintTickerTime').textContent=txt}
+function applyMaintenance(m){if(!m)return;const phase=['off','warning','active'].includes(m.phase)?m.phase:'off',old=maintPhase;
+  maintReason=m.reason||'Плановые технические работы';maintDeadline=m.deadline||null;
+  $('#maintWarnReason').textContent='Через 3 минуты начнутся технические работы. Сохраните проекты, чтобы ничего не потерять. '+maintReason;
+  $('#maintBlockReason').textContent=maintReason+' Пожалуйста, зайдите чуть позже.';
+  if(phase==='warning'){
+    $('#maintBlock').hidden=true;
+    if(old!=='warning'){$('#maintWarn').hidden=false;$('#maintTicker').hidden=true}
+    paintMaintCountdown();
+  }else if(phase==='active'){
+    $('#maintWarn').hidden=true;$('#maintTicker').hidden=true;$('#maintBlock').hidden=false;if(old!=='active')$('#maintStatusText').textContent='';
+  }else{
+    $('#maintWarn').hidden=true;$('#maintTicker').hidden=true;$('#maintBlock').hidden=true;
+    if(old==='active')location.reload();
+  }
+  maintPhase=phase;
+}
+$('#maintAck').onclick=()=>{$('#maintWarn').hidden=true;$('#maintTicker').hidden=false;paintMaintCountdown()};
+$('#maintDetails').onclick=()=>{$('#maintTicker').hidden=true;$('#maintWarn').hidden=false;paintMaintCountdown()};
+$('#maintStatus').onclick=async()=>{const b=$('#maintStatus');b.disabled=true;$('#maintStatusText').textContent='Проверяем статус…';try{const r=await fetch('/maintenance/status',{cache:'no-store'});if(!r.ok)throw Error('status');const m=await r.json();if(m.phase==='active')$('#maintStatusText').textContent='Да, технические работы ещё ведутся. Попробуйте проверить чуть позже.';else{applyMaintenance(m);location.reload()}}catch{$('#maintStatusText').textContent='Не удалось проверить статус. Проверьте подключение и попробуйте ещё раз.'}finally{b.disabled=false}};
+async function pollMaintenance(){try{const r=await fetch('/maintenance/status',{cache:'no-store'});if(r.ok)applyMaintenance(await r.json())}catch{}}
+setInterval(paintMaintCountdown,1000);setInterval(pollMaintenance,4000);pollMaintenance();
+
 /* ── Сеть ── */
 function connect(onopen){
   S.authed=false;const ws=S.ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws');
@@ -659,6 +718,7 @@ function lobbySend(m){if(S.ws?.readyState===1&&S.authed)return send(m);QUEUE.pus
 function leaveApp(msg){S.joinCode='';try{localStorage.removeItem('lastRoom');if(start)sessionStorage.setItem('drawzo_left',JSON.stringify({s:start,t:Date.now()}))}catch{}(msg?showAlert(msg):Promise.resolve()).then(()=>{location.href=location.pathname})}   // помним, что вышли сами — прямая ссылка не затянет обратно
 
 function onMsg(m){switch(m.t){
+  case'maintenance':applyMaintenance(m);break;
   case'hello':S.authed=true;S.lobbyConn=false;QUEUE.splice(0).forEach(send);S.dailyInfo=m.daily;S.cfg={maxColors:m.maxColors,bot:m.bot,app:m.app,premium:m.premium,stars:m.stars||100};$('#bPrem').hidden=m.premium;loadColors();
     S.uid=m.uid;S.mod=!!m.mod;S.guest=!!m.guest;if(m.guest)$('#bPrem').hidden=true;
     S.locked=!!m.locked;if(m.locked){S.nick=m.nick;$('#hiNick').textContent=m.nick;$('#bChangeNick').hidden=true;if(!$('#stepNick').hidden)showStep('stepMain')}break;
@@ -1284,7 +1344,7 @@ async function rpUpload(blob){const r=await fetch('/upload',{method:'POST',heade
   if(!r.ok)throw new Error(r.status);return(await r.json()).url}
 function saveBlob(blob,url){const name='drawzo-replay.'+(blob.type.includes('mp4')?'mp4':'webm');
   if(tg?.downloadFile&&url){try{tg.downloadFile({url,file_name:name});return}catch{}}
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove()}
+  const obj=URL.createObjectURL(blob),a=document.createElement('a');a.href=obj;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(obj),1000)}
 /* ── Кэш видео: готовый ролик хранится 5 минут и переживает закрытие окна реплея ── */
 const VID={key:'',blob:null,url:null,t:0,tm:0},VID_TTL=300000;
 const rpKey=()=>RP.title+'|'+JSON.stringify(RP.view)+'|'+RP.all.length+'|'+(RP.all[RP.all.length-1]?.id||'')+'|'+RP.all.reduce((n,o)=>n+(o.pts?o.pts.length:1),0);
@@ -1292,7 +1352,7 @@ const vidFresh=()=>VID.blob&&VID.key===RP.key&&Date.now()-VID.t<VID_TTL;
 async function rpVideo(){
   if(vidFresh())return VID;
   const b=await rpRecord();if(!b)return null;
-  Object.assign(VID,{key:RP.key,blob:b,url:null,t:Date.now()});clearTimeout(VID.tm);VID.tm=setTimeout(()=>{VID.blob=null;VID.url=null},VID_TTL);
+  Object.assign(VID,{key:RP.key,blob:b,url:null,t:Date.now()});clearTimeout(VID.tm);VID.tm=setTimeout(()=>{VID.blob=null;VID.url=null;VID.key=''},VID_TTL);
   toast('Видео готово — хранится 5 минут');return VID}
 async function rpUrl(v){if(!v.url)v.url=await rpUpload(v.blob);return v.url}
 $('#rVideo').onclick=async()=>{const v=await rpVideo();if(!v)return;let url=null;
@@ -1408,13 +1468,16 @@ function pvLoop(){if($('#settings').hidden)return;const cvx=$('#trPrev'),c=cvx.g
   pvPs=pvPs.filter(p=>now-p.b<p.life);c.clearRect(0,0,260,64);Trail.paint(c,pvPs,now);requestAnimationFrame(pvLoop)}
 
 /* ── Настройки (шестерёнка в углу) ── */
+function setDarkTheme(on){document.body.classList.toggle('dark-ui',!!on);try{localStorage.setItem('drawzo-dark',on?'1':'0')}catch{}}
+try{document.body.classList.toggle('dark-ui',localStorage.getItem('drawzo-dark')==='1')}catch{}
 function openSettings(){$('#stId').textContent=S.uid?('Ваш ID: '+S.uid+(S.guest?' · вход из браузера':'')):'';$('#vMusic').value=Vol.music*100;$('#vSfx').value=Vol.sfx*100;
-  $('#stMusicOn').checked=Music.on||(!Music.ctx&&Music.pref());$('#stNotify').checked=Vol.notify;trailUi();$('#settings').hidden=false;pvPs=[];pvLast=null;pvLoop()}
+  $('#stMusicOn').checked=Music.on||(!Music.ctx&&Music.pref());$('#stNotify').checked=Vol.notify;$('#stDark').checked=document.body.classList.contains('dark-ui');trailUi();$('#settings').hidden=false;pvPs=[];pvLast=null;pvLoop()}
 $('#bSettings').onclick=openSettings;$('#stClose').onclick=()=>$('#settings').hidden=true;
 $('#vMusic').oninput=e=>{Vol.music=e.target.value/100;localStorage.setItem('volMusic',Vol.music);if(Music.on&&Music.out)Music.out.gain.setTargetAtTime(.9*Vol.music,Music.ctx.currentTime,.1)};
 $('#vSfx').oninput=e=>{Vol.sfx=e.target.value/100;localStorage.setItem('volSfx',Vol.sfx)};$('#vSfx').onchange=()=>SFX.click();
 $('#stMusicOn').onchange=e=>{if(e.target.checked!==Music.on)Music.toggle()};
 $('#stNotify').onchange=e=>{Vol.notify=e.target.checked;localStorage.setItem('notify',e.target.checked?'1':'0')};
+$('#stDark').onchange=e=>setDarkTheme(e.target.checked);
 $('#stGuide').onclick=()=>{$('#settings').hidden=true;if(document.body.classList.contains('in'))showGuide();else toast('Гайд покажется на холсте — зайдите в комнату')};
 
 /* ── Гайд при первом запуске холста: тёмный фон, подсвеченные кнопки с подписями ── */

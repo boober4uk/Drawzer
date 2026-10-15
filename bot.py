@@ -17,7 +17,7 @@ except ImportError:
     pass
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://0.0.0.0:3000").rstrip("/")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8080").rstrip("/")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "DrawzoBot")
 APP_SHORT_NAME = os.getenv("APP_SHORT_NAME", "")
 ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
@@ -34,7 +34,7 @@ SHAPES = {"line", "arrow", "rect", "ellipse", "tri"}
 ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # без похожих символов (0/O, 1/I)
 
 # ───────────── премиум (донат Stars) ─────────────
-db = sqlite3.connect("data/drawzo.db", check_same_thread=False)
+db = sqlite3.connect("drawzo.db", check_same_thread=False)
 db.execute("create table if not exists premium(uid integer primary key, since integer)")
 def is_premium(uid): return db.execute("select 1 from premium where uid=?", (uid,)).fetchone() is not None
 def set_premium(uid): db.execute("insert or ignore into premium values(?,?)", (uid, int(time.time()))); db.commit()
@@ -42,7 +42,24 @@ def set_premium(uid): db.execute("insert or ignore into premium values(?,?)", (u
 # ───────────── роли и баны ─────────────
 db.execute("create table if not exists staff(uid integer primary key, role text)")
 db.execute("create table if not exists bans(uid integer primary key)")
+db.execute("create table if not exists app_state(key text primary key, value text not null)")
 db.commit()
+
+def _load_maintenance():
+    default = {"phase": "off", "deadline": None, "started": None, "reason": "Плановые технические работы"}
+    row = db.execute("select value from app_state where key='maintenance'").fetchone()
+    if row:
+        try:
+            data = json.loads(row[0])
+            if data.get("phase") in ("off", "warning", "active"):
+                default.update({k: data.get(k, default[k]) for k in default})
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return default
+
+MAINTENANCE = _load_maintenance()
+MAINTENANCE_TASK = None
+
 def is_mod(uid): return uid in ADMIN_IDS or db.execute("select 1 from staff where uid=? and role='mod'", (uid,)).fetchone() is not None
 def is_banned(uid): return db.execute("select 1 from bans where uid=?", (uid,)).fetchone() is not None
 def del_premium(uid): db.execute("delete from premium where uid=?", (uid,)); db.commit()
@@ -56,13 +73,16 @@ except sqlite3.OperationalError: pass
 db.execute("create table if not exists visits(uid integer primary key, day text)")
 try: db.execute("alter table projects add column inf integer default 0")   # бесконечный ли холст у проекта
 except sqlite3.OperationalError: pass   # когда человек заходил в последний раз
+db.execute("create index if not exists idx_projects_uid_updated on projects(uid, updated desc)")
+db.execute("create index if not exists idx_daily_entries_day_ts on daily_entries(day, ts)")
+db.execute("create index if not exists idx_daily_votes_day_target on daily_votes(day, target)")
 db.commit()
 
 PROMPTS = ["Котик в космосе", "Дом на дереве", "Робот, который любит цветы", "Дождливый город", "Дракон-вегетарианец", "Подводный велосипед",
            "Чайник-путешественник", "Облако с характером", "Зимняя сказка", "Любимая еда", "Маяк в тумане", "Динозавр на скейте",
            "Волшебный лес", "Корабль из бумаги", "Утро в горах", "Смешной монстр", "Остров в небе", "Лето на колёсах", "Сова-библиотекарь",
            "Город будущего", "Пингвин на пляже", "Самый уютный дом", "Космический повар", "Гигантская улитка", "Ночной карнавал",
-           "Мост между мирами", "Грибной дождь", "Лиса и луна", "Пират-неудачник", "Мой талисман", "Котик на подокольнике"]
+           "Мост между мирами", "Грибной дождь", "Лиса и луна", "Пират-неудачник", "Мой талисман"]
 
 WORDS = [
     "кот", "собака", "слон", "жираф", "пингвин", "сова", "краб", "медуза",
@@ -180,8 +200,14 @@ def recap_for(uid):
     return {"day": d[0], "prompt": PROMPTS[date.fromisoformat(d[0]).toordinal() % len(PROMPTS)], "me": uid,
             "items": [{"rank": i + 1, "uid": r[0], "name": r[1], "img": r[2], "votes": r[3]} for i, r in enumerate(rows)]}
 
-def fill_room(r, blob):   # загрузить сохранённые операции в комнату
+def fill_room(r, blob):   # загрузить сохранённые операции и последние 20 отменяемых действий
     r.log = json.loads(zlib.decompress(blob)); r.idx = {o["id"]: o for o in r.log}
+    r.undo.clear(); r.redo.clear()
+    for op in r.log:
+        uid, oid = op.get("uid"), op.get("id")
+        if uid is None or oid is None: continue
+        stack = r.undo.setdefault(uid, []); stack.append(oid)
+        if len(stack) > 20: del stack[:-20]
     r.n = max([int(o["id"][1:]) for o in r.log if re.fullmatch(r"o\d+", str(o["id"]))] or [0])
     r.t0 = time.time() - max([o.get("te", o.get("ts", 0)) for o in r.log] or [0]) / 1000
 
@@ -249,7 +275,11 @@ class Room:
                  "idle": u in s.idle, "prem": u in s.prem} for u, (_, n) in s.conn.items()]
     def add(s, op):
         op.setdefault("ts", s.now()); s.log.append(op); s.idx[op["id"]] = op
-        s.undo.setdefault(op["uid"], []).append(op["id"]); s.redo[op["uid"]] = []
+        # История отмены ограничена последними 20 действиями на игрока.
+        stack = s.undo.setdefault(op["uid"], [])
+        stack.append(op["id"])
+        if len(stack) > 20: del stack[:-20]
+        s.redo[op["uid"]] = []
     def destroy(s):
         ROOMS.pop(s.code, None); WATCH.pop(s.watch, None); s.pub = None
         if s.gtask: s.gtask.cancel()
@@ -261,6 +291,52 @@ async def send(ws, m):
 
 async def bcast(r, m, skip=None):
     await asyncio.gather(*(send(w, m) for u, (w, _) in list(r.conn.items()) if u != skip))
+
+def maintenance_payload():
+    return {"t": "maintenance", "phase": MAINTENANCE["phase"],
+            "deadline": MAINTENANCE.get("deadline"), "reason": MAINTENANCE.get("reason") or "Плановые технические работы"}
+
+def persist_maintenance():
+    payload = {k: MAINTENANCE.get(k) for k in ("phase", "deadline", "started", "reason")}
+    db.execute("insert or replace into app_state(key,value) values('maintenance',?)", (json.dumps(payload, ensure_ascii=False),))
+    db.commit()
+
+async def publish_maintenance():
+    msg = maintenance_payload()
+    await asyncio.gather(*(bcast(r, msg) for r in list(ROOMS.values())))
+
+async def _activate_maintenance_at(deadline):
+    global MAINTENANCE_TASK
+    try:
+        await asyncio.sleep(max(0, float(deadline) - time.time()))
+        if MAINTENANCE["phase"] != "warning" or MAINTENANCE.get("deadline") != deadline:
+            return
+        MAINTENANCE.update(phase="active", deadline=None, started=time.time())
+        persist_maintenance()
+        await publish_maintenance()
+    except asyncio.CancelledError:
+        raise
+    finally:
+        if MAINTENANCE_TASK is asyncio.current_task(): MAINTENANCE_TASK = None
+
+async def maintenance_start(reason="Плановые технические работы"):
+    global MAINTENANCE_TASK
+    if MAINTENANCE_TASK:
+        MAINTENANCE_TASK.cancel()
+    reason = re.sub(r"[\x00-\x1f]", "", str(reason or "")).strip()[:120] or "Плановые технические работы"
+    deadline = time.time() + 180
+    MAINTENANCE.update(phase="warning", deadline=deadline, started=None, reason=reason)
+    persist_maintenance()
+    MAINTENANCE_TASK = asyncio.create_task(_activate_maintenance_at(deadline))
+    await publish_maintenance()
+
+async def maintenance_finish():
+    global MAINTENANCE_TASK
+    if MAINTENANCE_TASK:
+        MAINTENANCE_TASK.cancel(); MAINTENANCE_TASK = None
+    MAINTENANCE.update(phase="off", deadline=None, started=None)
+    persist_maintenance()
+    await publish_maintenance()
 
 async def join(r, uid, name, ws, spectate, auto=False):
     if uid in r.banned: return await send(ws, {"t": "error", "e": "Вас удалили из этой комнаты"})
@@ -479,6 +555,7 @@ async def ws_handler(req):
     ws = web.WebSocketResponse(heartbeat=25, max_msg_size=2 * 1024 * 1024)
     await ws.prepare(req)
     user, room, uid, name, locked = None, None, 0, "", False
+    maintenance_notified = False
     try:
         async for msg in ws:
             if msg.type != WSMsgType.TEXT: continue
@@ -495,6 +572,15 @@ async def ws_handler(req):
                                 "bot": BOT_USERNAME, "app": APP_SHORT_NAME, "stars": DONATE_STARS, "daily": daily_info(),
                                 "nick": name if locked else None, "locked": locked,
                                 "uid": uid, "guest": uid < 0, "mod": is_mod(uid)})
+                await send(ws, maintenance_payload())
+                continue
+
+            # Во время активных техработ сервер не принимает команды приложения,
+            # даже если пользователь оставил WebSocket открытым заранее.
+            if MAINTENANCE["phase"] == "active":
+                if not maintenance_notified:
+                    await send(ws, maintenance_payload())
+                    maintenance_notified = True
                 continue
 
             if uid < 0 and (t.startswith("daily") or (t == "create" and d.get("daily"))):   # ежедневка — только в Telegram
@@ -580,9 +666,7 @@ async def ws_handler(req):
                 if len(ROOMS) >= MAX_ROOMS: await send(ws, {"t": "error", "e": "Сервер перегружен, попробуйте позже"}); continue
                 if room: await leave(room, uid, ws); room = None
                 r = Room(uid); r.pid = pid; r.ptitle = row[1]; r.inf = bool(row[2])
-                r.log = json.loads(zlib.decompress(row[0])); r.idx = {o["id"]: o for o in r.log}
-                r.n = max([int(o["id"][1:]) for o in r.log if re.fullmatch(r"o\d+", str(o["id"]))] or [0])
-                r.t0 = time.time() - max([o.get("te", o.get("ts", 0)) for o in r.log] or [0]) / 1000   # новые операции продолжают шкалу времени
+                fill_room(r, row[0])   # последние 20 действий доступны для отмены и в загруженном проекте
                 if await join(r, uid, name if locked else (clean_nick(d.get("nick")) or name), ws, False, locked): room = r
                 else: r.destroy()
                 continue
@@ -650,7 +734,9 @@ async def ws_handler(req):
             elif t == "redo" and room.can_draw(uid):
                 st = room.redo.get(uid, [])
                 if st:
-                    i = st.pop(); room.hidden.discard(i); room.undo.setdefault(uid, []).append(i)
+                    i = st.pop(); room.hidden.discard(i)
+                    undo_stack = room.undo.setdefault(uid, []); undo_stack.append(i)
+                    if len(undo_stack) > 20: del undo_stack[:-20]
                     await bcast(room, {"t": "show", "id": i})
             elif t == "save" and room.owner == uid:
                 prev = d.get("preview"); prev = prev if isinstance(prev, str) and prev.startswith("data:image/") and len(prev) < 150_000 else ""
@@ -733,8 +819,28 @@ async def ws_handler(req):
 # ───────────── видео-реплеи: загрузка и раздача ─────────────
 REPL = Path(__file__).parent / "replays"; REPL.mkdir(exist_ok=True)
 LAST_UP = {}
+REPLAY_TTL = 24 * 60 * 60  # временные ссылки на видео-реплеи живут сутки
+
+def cleanup_replay_files(now=None):
+    now = time.time() if now is None else now
+    for f in REPL.iterdir():
+        try:
+            if f.is_file() and now - f.stat().st_mtime > REPLAY_TTL:
+                f.unlink(missing_ok=True)
+        except OSError:
+            pass
+    # Ограничитель загрузок тоже не должен накапливать старые uid бесконечно.
+    for uid, ts in list(LAST_UP.items()):
+        if now - ts > 3600: LAST_UP.pop(uid, None)
+
+async def replay_cleanup_loop():
+    while True:
+        cleanup_replay_files()
+        await asyncio.sleep(3600)
 
 async def upload(req):
+    if MAINTENANCE["phase"] == "active":
+        raise web.HTTPServiceUnavailable(text="Технические работы. Попробуйте позже.")
     user = check_init_data(req.headers.get("X-Init", ""))
     if not user: raise web.HTTPForbidden()
     uid, now = int(user["id"]), time.time()
@@ -742,8 +848,7 @@ async def upload(req):
     LAST_UP[uid] = now
     data = await req.read()
     if len(data) < 1000: raise web.HTTPBadRequest()
-    for f in REPL.iterdir():                       # файлы живут сутки
-        if now - f.stat().st_mtime > 86400: f.unlink(missing_ok=True)
+    cleanup_replay_files(now)
     name = secrets.token_urlsafe(12).replace("-", "a").replace("_", "b") + (".mp4" if "mp4" in req.content_type else ".webm")
     path = REPL / name; path.write_bytes(data)
     if name.endswith(".webm") and shutil.which("ffmpeg"):   # Telegram-историям нужен mp4 (H.264)
@@ -767,14 +872,45 @@ def admin_ok(v): return bool(ADMIN_KEY) and secrets.compare_digest(str(v or ""),
 
 async def admin_page(req):
     if not admin_ok(req.query.get("key")): raise web.HTTPForbidden()
+    key = req.query.get("key", "")
     rows = "".join(
         f"<tr><td>{r.code}</td><td>{r.watch}</td><td>{r.online('owner','player')}/8</td><td>{r.online('spectator')}</td>"
-        f"<td>{len(r.log)}</td><td><form method=post action=/admin/close><input type=hidden name=key value='{ADMIN_KEY}'>"
+        f"<td>{len(r.log)}</td><td><form method=post action=/admin/close><input type=hidden name=key value='{key}'>"
         f"<input type=hidden name=code value={r.code}><button>Закрыть</button></form></td></tr>" for r in list(ROOMS.values()))
     n = db.execute("select count(*) from premium").fetchone()[0]
-    return web.Response(content_type="text/html", text=f"<meta charset=utf-8><h2>Drawzo admin</h2>"
-        f"<p>Комнат: {len(ROOMS)} · Premium: {n}</p><table border=1 cellpadding=6><tr><th>Игроки</th><th>Зрители</th>"
-        f"<th>Играют</th><th>Смотрят</th><th>Операций</th><th></th></tr>{rows}</table>")
+    phase = MAINTENANCE["phase"]
+    if phase == "warning":
+        left = max(0, int((MAINTENANCE.get("deadline") or time.time()) - time.time()))
+        phase_text = f"Предупреждение: запуск через {left // 60:02d}:{left % 60:02d}. Причина: {MAINTENANCE.get('reason')}"
+        action_form = f"<form method=post action=/admin/maintenance><input type=hidden name=key value='{key}'><input type=hidden name=action value='cancel'><button>Отменить запуск</button></form>"
+    elif phase == "active":
+        phase_text = f"Техработы идут. Причина: {MAINTENANCE.get('reason')}"
+        action_form = f"<form method=post action=/admin/maintenance><input type=hidden name=key value='{key}'><input type=hidden name=action value='finish'><button>Завершить техработы</button></form>"
+    else:
+        phase_text = "Техработы не запущены."
+        action_form = f"<form method=post action=/admin/maintenance><input type=hidden name=key value='{key}'><input type=hidden name=action value='start'><label>Причина / сообщение пользователям: <input name=reason maxlength=120 value='Плановые технические работы'></label> <button>Предупредить и запустить через 3 минуты</button></form>"
+    html = f"""<!doctype html><html lang=ru><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>
+    <title>Drawzo — админка</title><style>body{{font:16px system-ui;max-width:1000px;margin:24px auto;padding:0 16px;background:#f5f6fa;color:#202234}}section{{padding:16px;border:1px solid #ccd0df;border-radius:12px;margin:18px 0;background:white}}button{{padding:8px 12px;cursor:pointer}}input{{padding:8px;max-width:100%}}table{{border-collapse:collapse;width:100%}}td,th{{padding:8px;border:1px solid #ccd0df;text-align:left}}.state{{font-weight:700}}</style>
+    <h1>Drawzo admin</h1><p>Комнат: {len(ROOMS)} · Premium: {n}</p>
+    <section><h2>Технические работы</h2><p class=state>{phase_text}</p>{action_form}
+    <p>При запуске всем показывается предупреждение на 3 минуты. После отсчёта приложение блокируется. Перед перезапуском сервера проверьте, что нужные проекты сохранены: несохранённые комнаты хранятся в памяти процесса.</p></section>
+    <section><h2>Комнаты</h2><table><tr><th>Код комнаты</th><th>Код зрителя</th><th>Игроки</th><th>Зрители</th><th>Операций</th><th></th></tr>{rows}</table></section></html>"""
+    return web.Response(content_type="text/html", text=html)
+
+async def admin_maintenance(req):
+    d = await req.post()
+    if not admin_ok(d.get("key")): raise web.HTTPForbidden()
+    action = d.get("action")
+    if action == "start":
+        await maintenance_start(d.get("reason") or "Плановые технические работы")
+    elif action in ("cancel", "finish"):
+        await maintenance_finish()
+    raise web.HTTPFound(f"/admin?key={req.query.get('key') or d.get('key')}")
+
+async def maintenance_status(_):
+    payload = maintenance_payload()
+    payload.pop("t", None)
+    return web.json_response(payload, headers={"Cache-Control": "no-store"})
 
 async def admin_close(req):
     d = await req.post()
@@ -827,9 +963,17 @@ ADM_ACTIONS = {"addmod": "Назначить модератором", "delmod": 
 
 def adm_kb():
     b = lambda t, a: InlineKeyboardButton(text=t, callback_data="adm:" + a)
-    return InlineKeyboardMarkup(inline_keyboard=[[b("Статистика", "stats"), b("Списки", "list")],
-        [b(ADM_ACTIONS["addmod"], "addmod"), b(ADM_ACTIONS["delmod"], "delmod")], [b(ADM_ACTIONS["addprem"], "addprem"), b(ADM_ACTIONS["delprem"], "delprem")],
-        [b(ADM_ACTIONS["ban"], "ban"), b(ADM_ACTIONS["unban"], "unban")]])
+    rows = [[b("Статистика", "stats"), b("Списки", "list")],
+            [b(ADM_ACTIONS["addmod"], "addmod"), b(ADM_ACTIONS["delmod"], "delmod")],
+            [b(ADM_ACTIONS["addprem"], "addprem"), b(ADM_ACTIONS["delprem"], "delprem")],
+            [b(ADM_ACTIONS["ban"], "ban"), b(ADM_ACTIONS["unban"], "unban")]]
+    if MAINTENANCE["phase"] == "off":
+        rows.append([b("⚠️ Техработы через 3 минуты", "maint_start"), b("Статус техработ", "maint_status")])
+    elif MAINTENANCE["phase"] == "warning":
+        rows.append([b("Отменить запуск техработ", "maint_cancel"), b("Статус техработ", "maint_status")])
+    else:
+        rows.append([b("Завершить техработы", "maint_finish"), b("Статус техработ", "maint_status")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 @router.message(Command("admin_panel"))
 async def admin_panel(m: Message):
@@ -854,10 +998,33 @@ async def adm_cb(q: CallbackQuery):
     elif act == "list":
         ids = lambda sql: ", ".join(str(r[0]) for r in db.execute(sql).fetchall()) or "—"
         text = f"Модераторы: {ids('select uid from staff')}\nDrawzo+: {ids('select uid from premium')}\nБан: {ids('select uid from bans')}"
+    elif act == "maint_status":
+        phase = MAINTENANCE["phase"]
+        if phase == "warning":
+            left = max(0, int((MAINTENANCE.get("deadline") or time.time()) - time.time()))
+            text = f"Техработы начнутся через {left // 60:02d}:{left % 60:02d}. Причина: {MAINTENANCE.get('reason')}"
+        elif phase == "active": text = f"Техработы сейчас идут. Причина: {MAINTENANCE.get('reason')}"
+        else: text = "Техработы не запущены."
+    elif act == "maint_start":
+        if MAINTENANCE["phase"] == "off":
+            await maintenance_start()
+            text = "Предупреждение отправлено пользователям. Через 3 минуты приложение перейдёт в режим техработ. Отменить запуск можно этой же кнопкой в панели."
+        else: text = "Техработы уже запланированы или идут. Сначала проверьте статус."
+    elif act == "maint_cancel":
+        if MAINTENANCE["phase"] == "warning":
+            await maintenance_finish(); text = "Запуск техработ отменён."
+        else: text = "Сейчас нет ожидающего запуска, который можно отменить."
+    elif act == "maint_finish":
+        if MAINTENANCE["phase"] == "active":
+            await maintenance_finish(); text = "Техработы завершены. Пользователи смогут вернуться в приложение."
+        else: text = "Техработы сейчас не идут."
     elif act in ADM_ACTIONS:
         PENDING[q.from_user.id] = act
         text = f"{ADM_ACTIONS[act]}. Отправьте ID пользователя (число) или перешлите сюда любое его сообщение. /cancel — отмена"
     else: return await q.answer()
+    if act.startswith("maint_"):
+        try: await q.message.edit_reply_markup(reply_markup=adm_kb())
+        except Exception: pass
     await q.message.answer(text); await q.answer()
 
 @router.message(lambda m: m.from_user is not None and m.from_user.id in PENDING)
@@ -886,11 +1053,17 @@ async def adm_input(m: Message):
 async def main():
     app = web.Application(client_max_size=30 * 1024 * 1024)
     app.add_routes([web.get("/", index), web.get("/ws", ws_handler), web.get("/admin", admin_page),
-                    web.post("/admin/close", admin_close), web.post("/upload", upload), web.get("/r/{name}", replay_file), web.get("/health", lambda _: web.Response(text="ok")),
+                    web.post("/admin/close", admin_close), web.post("/admin/maintenance", admin_maintenance),
+                    web.get("/maintenance/status", maintenance_status), web.post("/upload", upload),
+                    web.get("/r/{name}", replay_file), web.get("/health", lambda _: web.Response(text="ok")),
                     web.static("/static", STATIC)])
+    asyncio.create_task(replay_cleanup_loop())
+    global MAINTENANCE_TASK
+    if MAINTENANCE["phase"] == "warning" and MAINTENANCE.get("deadline"):
+        MAINTENANCE_TASK = asyncio.create_task(_activate_maintenance_at(MAINTENANCE["deadline"]))
     runner = web.AppRunner(app); await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
-    print(f"Drawzo: http://0.0.0.0:{PORT}")
+    print(f"Drawzo: http://localhost:{PORT}")
     if not BOT_TOKEN:
         print("BOT_TOKEN не задан — работает только веб-часть (DEV_MODE)"); await asyncio.Event().wait()
     bot = Bot(BOT_TOKEN.strip().strip("\"'")); dp = Dispatcher(); dp.include_router(router)
