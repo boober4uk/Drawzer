@@ -34,7 +34,7 @@ SHAPES = {"line", "arrow", "rect", "ellipse", "tri"}
 ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # без похожих символов (0/O, 1/I)
 
 # ───────────── премиум (донат Stars) ─────────────
-db = sqlite3.connect("drawzo.db", check_same_thread=False)
+db = sqlite3.connect("data/drawzo.db", check_same_thread=False)
 db.execute("create table if not exists premium(uid integer primary key, since integer)")
 def is_premium(uid): return db.execute("select 1 from premium where uid=?", (uid,)).fetchone() is not None
 def set_premium(uid): db.execute("insert or ignore into premium values(?,?)", (uid, int(time.time()))); db.commit()
